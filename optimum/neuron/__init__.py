@@ -31,6 +31,9 @@ _import_structure = {
         "NeuronModelForTokenClassification",
         "NeuronModelForMultipleChoice",
     ],
+    "modeling_decoder": [
+        "NeuronModelForCausalLM"
+    ],
     "accelerate": [
         "NeuronAccelerator",
         "NeuronAcceleratorState",
@@ -52,6 +55,7 @@ if TYPE_CHECKING:
     )
     from .modeling_base import NeuronBaseModel
     from .pipelines import pipeline
+    from .modeling_decoder import NeuronModelForCausalLM
     from .trainers import Seq2SeqTrainiumTrainer, TrainiumTrainer
     from .training_args import Seq2SeqTrainiumTrainingArguments, TrainiumTrainingArguments
 else:
