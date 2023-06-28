@@ -16,8 +16,11 @@
 Common Neuron configuration classes that handle most of the features for building model specific
 configurations.
 """
+import importlib
+from typing import List
 
 from ...utils import DummyTextInputGenerator, logging
+from ...neuron.utils import is_transformers_neuronx_available
 from .base import NeuronConfig
 
 
@@ -31,3 +34,23 @@ class TextEncoderNeuronConfig(NeuronConfig):
 
     DUMMY_INPUT_GENERATOR_CLASSES = (DummyTextInputGenerator,)
     MANDATORY_AXES = ("batch_size", "sequence_length", ("multiple-choice", "num_choices"))
+
+
+class DecoderNeuronConfig(NeuronConfig):
+    """
+    Handles encoder-based text architectures.
+    """
+
+    MANDATORY_AXES = ("batch_size", "sequence_length")
+    NEURONX_MODULE = None
+    NEURONX_CLASS = None
+
+    @property
+    def inputs(self) -> List[str]:
+        return ["input_ids", "attention_mask", "token_type_ids"]
+
+    @classmethod
+    def neuronx_class(cls):
+        if is_transformers_neuronx_available():
+            module = importlib.import_module(cls.NEURONX_MODULE)
+            return getattr(module, cls.NEURONX_CLASS)

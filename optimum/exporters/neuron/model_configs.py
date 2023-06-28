@@ -19,7 +19,7 @@ from typing import List
 
 from ...utils.normalized_config import NormalizedConfigManager
 from ..tasks import TasksManager
-from .config import TextEncoderNeuronConfig
+from .config import TextEncoderNeuronConfig, DecoderNeuronConfig
 
 
 COMMON_TEXT_TASKS = [
@@ -139,3 +139,9 @@ class DebertaNeuronConfig(BertNeuronConfig):
 @register_in_tasks_manager("deberta-v2", *COMMON_TEXT_TASKS)
 class DebertaV2NeuronConfig(DebertaNeuronConfig):
     pass
+
+@register_in_tasks_manager("gpt2", "text-generation")
+class GPT2NeuronConfig(DecoderNeuronConfig):
+    NORMALIZED_CONFIG_CLASS = NormalizedConfigManager.get_normalized_config_class("gpt2")
+    NEURONX_MODULE = "transformers_neuronx.gpt2.model"
+    NEURONX_CLASS = "GPT2ForSampling"
