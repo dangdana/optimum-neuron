@@ -20,6 +20,7 @@ from .import_utils import (
     is_neuron_available,
     is_neuronx_available,
     is_neuronx_distributed_available,
+    is_transformers_neuronx_available,
     is_torch_xla_available,
 )
 from .patching import DynamicPatch, ModelPatcher, Patcher, patch_everywhere, patch_within_function
