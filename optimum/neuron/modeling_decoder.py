@@ -21,8 +21,9 @@ from tempfile import TemporaryDirectory
 
 import torch
 
-from transformers import AutoModelForCausalLM
-
+from transformers import AutoModelForCausalLM, GenerationConfig
+from transformers.utils import ModelOutput
+from transformers.generation import GenerationMixin
 
 from ..modeling_base import OptimizedModel
 from ..exporters.neuron.model_configs import *  # noqa: F403
@@ -46,12 +47,17 @@ class NeuronModelDecoder(OptimizedModel):
     def __init__(
         self,
         model: torch.nn.Module,
-        config: "PreTrainedConfig"
+        config: "PreTrainedConfig",
+        generation_config: Optional[GenerationConfig] = None
     ):
         if not is_transformers_neuronx_available() or not isinstance(model, NeuronxPretrainedModel):
             raise ValueError("The source model must be a transformers_neurons.PreTrainedModel.")
 
         super().__init__(model, config)
+        self.device = torch.device('cpu')
+        if generation_config is None:
+            generation_config = GenerationConfig.from_model_config(config)
+        self.generation_config = generation_config
 
     @classmethod
     def _from_transformers(
@@ -142,7 +148,7 @@ class NeuronModelDecoder(OptimizedModel):
 
 
     def forward(self, *args, **kwargs):
-        self.model.forward(*args, **kwargs)
+        raise NotImplementedError()
 
 
     def _save_pretrained(self, save_directory: Union[str, Path]):
@@ -157,6 +163,57 @@ class NeuronModelDecoder(OptimizedModel):
         raise NotImplementedError()
 
 
-class NeuronModelForCausalLM(NeuronModelDecoder):
+class NeuronModelForCausalLM(NeuronModelDecoder, GenerationMixin):
 
     auto_model_class = AutoModelForCausalLM
+    main_input_name = "input_ids"
+
+    def __init__(self, model, config):
+        super().__init__(model, config)
+        self.cur_len = 0
+
+    def reset_generation(self):
+        self.cur_len = 0
+
+    def forward(self, input_ids, cache_ids, start_ids=None, output_hidden_states=False, output_attentions=False,
+            attention_mask=None, return_dict=False):
+
+        if  output_hidden_states or output_attentions or attention_mask is not None:
+            warnings.warn("Warning: These arguments are not used by forward(): \
+                (output_hidden_states, output_attentions, attention_mask)")
+        out_logits = self.model.forward(input_ids, cache_ids, start_ids)
+        out_logits = out_logits[:, None, :]
+        if return_dict:
+            return ModelOutput(
+                [("logits", out_logits)]
+            )
+        return (out_logits,)
+
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
+        # convert attention_mask to start_ids
+        attention_mask = None
+        start_ids = None
+        if "attention_mask" in kwargs:
+            attention_mask = kwargs["attention_mask"]
+
+        if attention_mask is not None:
+            _, start_ids = attention_mask.max(axis=1)
+
+        if self.cur_len > 0:
+            input_ids = input_ids[:, -1:]
+            cache_ids = torch.as_tensor([self.cur_len], dtype=torch.int32)
+        else:
+            cache_ids = torch.arange(input_ids.shape[-1], dtype=torch.int32)
+
+        self.cur_len += input_ids.shape[-1]
+        model_inputs = {
+            "input_ids": input_ids,
+            "cache_ids": cache_ids,
+            "start_ids": start_ids,
+        }
+
+        return model_inputs
+
+    def can_generate(self):
+        """Returns True to validate the check that the model using `GenerationMixin.generate()` can indeed generate."""
+        return True
